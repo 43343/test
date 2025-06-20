@@ -1,13 +1,13 @@
 #include <vector>
 #include <thread>
 #include <mutex>
-#include <stdio.h>
+#include <atomic>
 #include <random>
 #include <iostream>
 
 std::vector<int> a;
 std::vector<uint64_t> b;
-std::mutex aMutex;
+std::mutex a_mutex; 
 
 uint64_t fib(int n) {
     uint64_t a = 0, b = 1;
@@ -18,20 +18,16 @@ uint64_t fib(int n) {
     }
     return a;
 }
-void print_fib(int thread_id)
+void print_fib(int thread_id, size_t start, size_t end)
 {
-	while(!a.empty())
-	{
-		{
-			std::lock_guard<std::mutex> lock(aMutex);
-			if (a.empty()) break;
-			int num = a[0];
-			a.erase(a.begin());
-			uint64_t fib_num = fib(num);
-			std::cout << "Thread id: " << thread_id << " Номер числа фибоначи: " << num << " Число фибоначи: " << fib_num << "\n";
-			b.push_back(fib_num);
-		}
-	}
+	for (size_t i = start; i < end; ++i) {
+        	uint64_t fib_num = fib(a[i]);
+        	b[i] = fib_num;
+        	{
+            		std::lock_guard<std::mutex> lock(a_mutex);
+           	 	std::cout << "Thread id: " << thread_id  << " Номер числа фибоначи: " << a[i]  << " Число фибоначи: " << fib_num << "\n";
+        	}
+    	}
 }
 int main()
 {
@@ -46,6 +42,7 @@ int main()
     	std::uniform_int_distribution<> dist(0, 92);
 	
 	a.resize(n);
+	b.resize(n);
 	for (int& num : a) {
         	num = dist(gen);
     	}
@@ -57,8 +54,13 @@ int main()
 	}
 	std::cout << " }\n";
 	std::vector<std::thread> threads;
+	size_t chunk_size = n / p;
+    	size_t remainder = n % p;
+    	size_t start = 0;
 	for (int i = 0; i < p; ++i) {
-        	threads.emplace_back(print_fib, i);
+		size_t end = start + chunk_size + (i < remainder ? 1 : 0);
+        	threads.emplace_back(print_fib, i, start, end);
+		start = end;
 	}
 	for (auto& thread : threads) {
         	thread.join();
